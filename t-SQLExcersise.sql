@@ -222,7 +222,7 @@ select dbo.circleArea(13) as CA
 
 --TRIGGERY
 --Zadanie 3.1
---Napisz trigger
+--Napisz trigger blokuj¹cy dodawanie rekordów do tabeli Order Details
 use Northwind
 go
 create trigger tr_block_insert
@@ -272,7 +272,7 @@ after update
 as
 if UPDATE(UnitPrice)
 begin
-if (select UnitsInStock from deleted) = 0
+if exists (select UnitsInStock from deleted where UnitsInStock = 0)
 	begin
 	raiserror('Nie mo¿na zmieniaæ ceny produktu gdy jego iloœæ jest = 0',16,1)
 	rollback
@@ -410,14 +410,129 @@ id int primary key identity,
  newPrice money
  )
  go
-alter trigger tr_changePrice
+create trigger tr_saveChangedPrice
  on [dbo].[Products]
  after update
  as
  set nocount on
  if UPDATE(UnitPrice)
- insert into Products_log([date_and_time], [who], idProduct, oldPrice, newPrice) values(GETDATE(), SYSTEM_USER, (select ProductID from inserted), (select UnitPrice from deleted), (select UnitPrice from inserted)) 
+ insert into Products_log([date_and_time], [who], idProduct, oldPrice, newPrice) select GETDATE(), SYSTEM_USER, deleted.ProductID, deleted.UnitPrice, inserted.UnitPrice from deleted inner join inserted on deleted.ProductID = inserted.ProductID
 go
-select * from Products where ProductID = 8
-update Products set UnitPrice = 41 where ProductID = 8
+select * from Products where ProductID in(1,18)
+update Products set UnitPrice = 18 where ProductID in(1,18)
 select * from Products_log
+
+--Zadanie 3.8
+--Proszê napisaæ wyzwalacz, który nie pozwoli na wykonanie zdania UPDATE
+--(tj. wykona ROLLBACK), jeœli wartoœæ w kolumnie k2 zmieni siê
+--w przynajmniej jednym zmienianym rekordzie na mniejsz¹:
+use Northwind
+go
+alter trigger tr_changePriceRollback
+on [dbo].[Products]
+after update
+as
+if UPDATE(UnitPrice)
+begin
+	if (select UnitPrice from deleted where ProductID = 18) > (select UnitPrice from inserted where ProductID = 18)
+	begin
+		print 'Niedozwolna zmiana ceny na ni¿sz¹ przez: '+System_User
+		rollback
+	end
+end
+go
+--Zadanie 3.9
+--Teraz zmieñmy sposób dzia³ania wyzwalacza - 
+--Tym razem chcemy, ¿eby zmiany UnitPrice na wartoœæ wiêksz¹ by³y akceptowane
+--a nie wykonaj¹ siê tylko te na wartoœæ mniejsz¹. Oczywiœcie
+--chodzi o zmiany wykonane jednym zdaniem UPDATE.
+alter trigger tr_changePriceRollback
+on Products
+instead of update
+as
+declare @tempTable table(id int identity, idProduct int, oldPrice money, newPrice money)
+declare @idProduct int
+declare @i int = 1
+if UPDATE(UnitPrice)
+begin
+insert into @tempTable select deleted.ProductID, deleted.UnitPrice, inserted.UnitPrice from deleted inner join inserted on deleted.ProductID = inserted.ProductID order by ProductID
+while @i <= (select COUNT(id) from @tempTable)
+	begin
+		if (select oldPrice from @tempTable where id = @i) > (select newPrice from @tempTable where id = @i)
+		begin
+			set @idProduct = (select idProduct from @tempTable where id = @i)
+			print 'Niedozwolona zmiana ceny na ni¿sz¹ produktu id = '+cast(@idProduct as varchar(3))+' przez u¿ytkownika: '+system_user
+		end
+		else
+		begin
+			update Products set UnitPrice = (select newPrice from @tempTable where id = @i) where ProductID = (select idProduct from @tempTable where id = @i)
+		end
+		set @i = @i + 1
+	end
+end
+go
+select * from Products where ProductID in(1,18)
+update Products set UnitPrice = 41 where ProductID in(1,18)
+select * from Products_log order by date_and_time desc
+enable trigger [tr_changePriceRollback] on Products
+
+--Zadanie 3.10
+--Napisaæ wyzwalacz, który pozwoli na dopisanie do
+--tabeli SF (Szczegó³y faktur) tylko 
+--poprawnych numerów towaru lub us³ugi.
+--Numery towarów s¹ w tabeli Towary, numery
+--us³ug s¹ w tabeli Us³ugi, wiiêc nie da siê
+--utworzyæ wiêzów klucza obcego w tabeli SF
+--(bo klucz obcy mo¿e siê odwo³ywaæ tylko do 
+--jednej tabeli.
+
+use test
+
+create table services (
+id int primary key check(id >= 100),
+serviceName varchar(20),
+laborPrice money
+)
+create table products (
+id int primary key check(id < 100),
+productName varchar(25),
+price money
+)
+create table invoices (
+id int check(id >=1000),
+ServiceOrProductId int,
+quantity int
+primary key (id, ServiceOrProductId)
+)
+go
+insert into services values(101, 'usluga1',100), (102, 'usluga2', 200), (103, 'usluga3', 300)
+insert into products values(1, 'produkt1', 10), (2, 'produkt2', 20), (3, 'produkt3', 30)
+select * from services
+select * from products
+go
+create trigger tr_checkoutServiceOrProductId
+on invoices
+after insert
+as
+if exists (select * from inserted where ServiceOrProductId not in (select id from services) and ServiceOrProductId not in (select id from products))
+begin
+print 'Numer id us³ugi lub produktu jest nieprawid³owy'
+rollback
+end
+go
+insert into invoices values(1000, 101, 7), (1000, 3, 1), (1000, 102, 13)
+insert into invoices values(1001, 103, 7), (1001, 2, 12), (1001, 101, 17)
+select * from invoices order by id desc
+
+--Zadanie 3.11
+--Inna wersja powy¿szego wyzwalacza. Tym razem chcemy, ¿eby wyzwalacz
+--pozwala³ na wpisanie poprawnych numerów towarów 
+--i us³ug a odrzuca³ tylko te niepoprawne
+go
+alter trigger tr_checkoutServiceOrProductId
+on invoices
+instead of insert
+as
+insert into invoices select * from inserted where ServiceOrProductId in (select id from services) or ServiceOrProductId in (select id from products)
+go
+insert into invoices values(1002, 103, 71), (1002, 21, 12), (1002, 101, 171)
