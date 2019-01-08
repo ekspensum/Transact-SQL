@@ -129,7 +129,19 @@ end
 return
 go
 exec pr_best_customers
-select * from BestCustomer
+select * from BestCustomer3
+
+--inna, prostsza wersja powy¿szej procedury:
+go
+create proc pr_InsertBestCustomer
+as
+declare @tmpCustomers table (id int primary key identity, total money, idCustomer varchar(5), customer varchar(100))
+if not exists (select * from sys.tables where name = 'BestCustomer3')
+create table BestCustomer3 (id int primary key identity, total money, idCustomer varchar(5), customer varchar(100))
+insert into @tmpCustomers select SUM(UnitPrice * Quantity) as amount, dbo.Customers.CustomerID, dbo.Customers.CompanyName from [Order Details] inner join Orders on dbo.Orders.OrderID = dbo.[Order Details].OrderID inner join dbo.Customers on dbo.Customers.CustomerID = dbo.Orders.CustomerID group by dbo.Customers.CustomerID, dbo.Customers.CompanyName order by amount desc
+insert into BestCustomer3 select total, idCustomer, customer from @tmpCustomers where total in (select top(1) total from @tmpCustomers order by total desc)
+exec pr_InsertBestCustomer
+select * from BestCustomer3
 
 --Zadanie 1.7
 --Zmodyfikuj procedurê z zadania 2 tak, by do tabeli BestCustomers wpisane by³y dane nie tylko klientów, którzy zamówili na najwiêksz¹ kwotê, ale równie¿ tych, którzy z³o¿yli zamówienia na kwotê drug¹ i trzeci¹ od góry.
@@ -156,6 +168,22 @@ return
 go
 exec pr_best_customers2 5
 select * from BestCustomer2
+
+--inna, prostsza wersja powy¿szej procedury:
+use northwind
+go
+alter proc pr_InsertBestCustomer2 @customers int
+as
+declare @tmpCustomers table (id int primary key identity, total money, idCustomer varchar(5), customer varchar(100))
+if not exists (select * from sys.tables where name = 'BestCustomer3')
+create table BestCustomer3 (id int primary key identity, total money, idCustomer varchar(5), customer varchar(100))
+insert into @tmpCustomers select SUM(UnitPrice * Quantity) as amount, dbo.Customers.CustomerID, dbo.Customers.CompanyName from [Order Details] inner join Orders on dbo.Orders.OrderID = dbo.[Order Details].OrderID inner join dbo.Customers on dbo.Customers.CustomerID = dbo.Orders.CustomerID group by dbo.Customers.CustomerID, dbo.Customers.CompanyName order by amount desc
+insert into BestCustomer3 select top(@customers) total, idCustomer, customer from @tmpCustomers where total in (select top(@customers) total from @tmpCustomers order by total desc) order by total desc
+go
+exec pr_InsertBestCustomer2 3
+select * from BestCustomer3
+delete from BestCustomer3
+
 
 --FUNKCJE
 use Northwind
@@ -197,7 +225,7 @@ go
 select * from dbo.fn_bestOrder(15)
 
 --Zadanie 2.3
---Napisz funcjê znajduj¹c¹ 
+--Napisz funcjê znajduj¹c¹ produkty wg najwy¿szej zamawianej iloœci sortowane malej¹co
 alter function fn_maxQuantity()
 returns @maxQuantityByProducts table (idProduct int, productName varchar(35), maxQuantity int)
 as
@@ -219,6 +247,27 @@ return @radius*@radius*3.14
 end
 go
 select dbo.circleArea(13) as CA
+
+--Zadanie 2.5
+--Napisz funkcjê pokazuj¹c¹ wszystkie produkty z danej kategorii
+go
+alter function fn_ShowAllProductsInCategory(@category varchar(15))
+returns @products table
+(
+	id int identity,
+	productName varchar(45),
+	unitPrice money,
+	unitInSock int,
+	categoryName varchar(45)
+)
+as
+begin
+	insert into @products select ProductName, UnitPrice, UnitsInStock, CategoryName from Products inner join Categories on Products.CategoryID = Categories.CategoryID where CategoryName like '%'+@category+'%' order by ProductName
+	return
+end
+go
+select * from Categories
+select * from fn_ShowAllProductsInCategory('rod')
 
 --TRIGGERY
 --Zadanie 3.1
