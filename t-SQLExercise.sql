@@ -403,7 +403,6 @@ end
 go
 select * from fn_totalSalesForProduct2(null)
 
-
 --TRIGGERY
 --Zadanie 3.1
 --Napisz trigger blokuj¹cy dodawanie rekordów do tabeli Order Details
