@@ -184,6 +184,60 @@ exec pr_InsertBestCustomer2 3
 select * from BestCustomer3
 delete from BestCustomer3
 
+--Zadanie 1.8	
+--Proszê	zmodyfikowaæ	procedurê	z	zadania 1.3	tak,	by	po	udanym	dopisaniu	wiersza	do	[Order	Details]	
+--procedura	sprawdza³a	czy	liczba	sztuk	towaru	(pole	UnitsInStock	w	tabeli	Products)	nie	sta³a	siê	mniejsza	
+--od	poziomu	wymagaj¹cego	zamówienia	produktu	u	dostawcy	(pole	ReorderLevel).	
+--Jeœli	tak,	to	nale¿y	dopisaæ	wiersz	do	nowo	utworzonej	tabeli	
+--Zamowienia(ID	INT	IDENTITY(1,1)	PRIMARY	KEY,	ProductID	INT,	SupplierID	INT,	Data	Date).
+select * from [Order Details]
+select * from Products
+select * from Orders
+go
+alter proc pr_addOneRowDetail(@idOrder int, @idProduct int, @quantity int, @discount float)
+as
+if not exists (select OrderID from Orders where OrderID = @idOrder)
+begin
+raiserror('Nie ma zlecenia o numerze %d',16,1, @idOrder)
+return
+end
+if not exists (select ProductID from Products where ProductID = @idProduct)
+begin
+raiserror('Nie ma produktu o numerze %d',16,1, @idProduct)
+return
+end
+if @quantity > (select UnitsInStock from Products where ProductID = @idProduct)
+begin
+raiserror('Nie ma wystarczaj¹cej iloœci produktu id = %d', 16,1,@idProduct)
+declare @unitInStock int = (select UnitsInStock from Products where ProductID = @idProduct)
+print 'Aktualna iloœæ wybranego produktu to: ' + convert(varchar(3), @unitInStock)
+return 
+end
+begin try
+	begin tran
+		insert into [Order Details] values(@idOrder, @idProduct, (select UnitPrice from Products where ProductID = @idProduct), @quantity, @discount)
+		update Products set UnitsInStock = (UnitsInStock - @quantity) where ProductID = @idProduct
+		if (select (UnitsInStock - ReorderLevel) from Products where ProductID = @idProduct) <= 0
+		begin
+			if not exists (select * from sys.tables where name = 'Zamowienia')
+			create table Zamowienia (id int primary key identity, idProduct int, idSupplier int, currentDate Date )
+			insert into Zamowienia values(@idProduct, (select SupplierID from Products where ProductID = @idProduct), GETDATE())
+		end
+	commit
+end try
+begin catch
+	rollback
+end catch
+go
+exec pr_addOneRowDetail 10249, 7, 14, 0
+select * from Products where ProductID = 7
+select * from [Order Details] where OrderID = 10249 and ProductID = 7
+delete [Order Details] where OrderID = 10249 and ProductID = 7
+select * from Zamowienia
+alter table [dbo].[Products]
+disable trigger [tr_saveChangedPrice]
+
+
 
 --FUNKCJE
 use Northwind
@@ -268,6 +322,87 @@ end
 go
 select * from Categories
 select * from fn_ShowAllProductsInCategory('rod')
+
+--Zadanie 2.6
+--Napisz funkcjê obliczaj¹c¹ pierwiastek kwadratowy z danej liczby
+go
+create function [dbo].[fn_calulateSquareRoot](@number money)
+returns money
+as
+begin
+	declare @root money = 1
+	declare @i int = 100
+	while @i > 0
+		begin
+			set @root = 0.5 * (@root + @number / @root)
+			if @root * @root > @number
+				set @i = @i - 1
+			else
+				break
+		end
+	return @root
+end
+go
+select dbo.fn_calulateSquareRoot(100)
+
+--Zadanie	2.7	
+--Proszê	napisaæ	funkcjê	skalarn¹,	która	dla	podanej	jako	argument	daty	poda	dzieñ	tygodnia.	
+--Wskazówka	–	nale¿y	wykorzystaæ	funkcjê	DatePart().	
+use cw
+go
+create function fn_dayOfWeek(@date Date)
+returns varchar(12)
+as
+begin
+declare @d int = DatePart(dw, @date)
+	return (select case @d
+	when 1 then 'Niedziela'
+	when 2 then 'Poniedzia³ek'
+	when 3 then 'Wtorek'
+	when 4 then 'Œroda'
+	when 5 then 'Czwartek'
+	when 6 then 'Pi¹tek'
+	when 7 then 'Sobota'
+	end)
+end
+go
+select dbo.fn_dayOfWeek('2020-01-10')
+
+--Zadanie 2.8
+--Proszê	przy	wykorzystaniu	powy¿szej	funkcji	wypisaæ	zdaniem	SQL	dla	ka¿dego	dnia	tygodnia	
+--sumê	kwot	uzyskanych	za	sprzeda¿	w	dany	dzieñ.	W	sumie	ma	byæ	7	wierszy	posortowanych	malej¹co	
+--wed³ug	kwoty	(na	górze	powinny	byæ	dane	dla	‘najlepszego’	dnia	tygodnia).
+use Northwind
+select * from [Order Details]
+select * from Orders
+select dbo.fn_dayOfWeek(OrderDate), SUM(UnitPrice * Quantity) as kwota from Orders inner join [Order Details] on Orders.OrderID = [Order Details].OrderID group by dbo.fn_dayOfWeek(OrderDate) order by kwota desc
+
+--Zadanie 2.9	
+--Proszê	napisaæ	funkcjê,	która	wypisze	dla	ka¿dego	klienta	sumê	kwot	jakie	klient	wyda³	na	zamówienia	towaru	o	
+--podanym	jako	argument	identyfikatorze.	Jeœli	towar	nie	bêdzie	podany,	wówczas	funkcja	ma	zwróciæ	sumê	kwot	
+--dla	wszystkich	towarów	na	wszystkich	zamówieniach	(dla	ka¿dego	klienta).
+go
+create function fn_totalSalesForProduct(@idProduct int)
+returns table 
+as
+return (select Customers.CustomerID, CompanyName, SUM(UnitPrice*Quantity) as Total, (select ProductName from Products where ProductID = @idProduct) as ProductName from Orders inner join [Order Details] on Orders.OrderID = [Order Details].OrderID inner join Customers on Orders.CustomerID = Customers.CustomerID where ProductID = @idProduct group by Customers.CustomerID, CompanyName)
+go
+select * from fn_totalSalesForProduct(7)
+--rozbudowana wersja funkcji jak wy¿ej
+go
+create function fn_totalSalesForProduct2(@idProduct int)
+returns @tmpTab table (idCustomer varchar(5), CompanyName varchar(45), Total money, ProductName varchar(45))
+as
+begin
+if @idProduct is not null
+insert into @tmpTab select Customers.CustomerID, CompanyName, SUM(UnitPrice*Quantity) as Total, (select ProductName from Products where ProductID = @idProduct) as ProductName from Orders inner join [Order Details] on Orders.OrderID = [Order Details].OrderID inner join Customers on Orders.CustomerID = Customers.CustomerID where ProductID = @idProduct group by Customers.CustomerID, CompanyName
+else
+insert into @tmpTab select Customers.CustomerID, CompanyName, SUM(UnitPrice*Quantity) as Total, (select ProductName from Products where ProductID = @idProduct) as ProductName from Orders inner join [Order Details] on Orders.OrderID = [Order Details].OrderID inner join Customers on Orders.CustomerID = Customers.CustomerID group by Customers.CustomerID, CompanyName
+return
+end
+go
+select * from fn_totalSalesForProduct2(null)
+
 
 --TRIGGERY
 --Zadanie 3.1
@@ -429,8 +564,15 @@ if (select UnitsInStock from Products where ProductID = (select idProduct from @
 	end
 else
 	begin
-	update [Order Details] set UnitPrice = (select UnitPrice from Products where ProductID = (select idProduct from @tempTable where id = @i)) where OrderID = (select idOrder from @tempTable where id = @i) and ProductID = (select idProduct from @tempTable where id = @i)
-	update Products set UnitsInStock = (UnitsInStock - (select quantity from @tempTable where id = @i)) where ProductID = (select idProduct from @tempTable where id = @i)
+		begin try
+			begin tran
+				update [Order Details] set UnitPrice = (select UnitPrice from Products where ProductID = (select idProduct from @tempTable where id = @i)) where OrderID = (select idOrder from @tempTable where id = @i) and ProductID = (select idProduct from @tempTable where id = @i)
+				update Products set UnitsInStock = (UnitsInStock - (select quantity from @tempTable where id = @i)) where ProductID = (select idProduct from @tempTable where id = @i)
+			commit
+		end try
+		begin catch
+			rollback
+		end catch
 	end 
 set @i = @i + 1
 end
