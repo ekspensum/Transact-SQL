@@ -1,8 +1,9 @@
 --PROCEDURY
 --Zadanie 1.1 
---Proszê napisaæ procedurê sk³adowan¹, która wypisze dane wszystkich produktów (tabela Products, baza danych Northwind), których cena jednostkowa jest wiêksza lub równa cenie podanej jako argument procedury. Produkty maj¹ byæ posortowane malej¹co wed³ug ceny i  rosn¹co wed³ug nazwy (jeœli cena by³aby jednakowa dla pewnych produktów).
---create proc pr_products_price(@price float)
-alter proc pr_products_price(@price money=30)
+--Proszê napisaæ procedurê sk³adowan¹, która wypisze dane wszystkich produktów (tabela Products, baza danych Northwind), 
+--których cena jednostkowa jest wiêksza lub równa cenie podanej jako argument procedury. 
+--Produkty maj¹ byæ posortowane malej¹co wed³ug ceny i  rosn¹co wed³ug nazwy (jeœli cena by³aby jednakowa dla pewnych produktów).
+create proc pr_products_price(@price money=30)
 AS
 select * from Products where UnitPrice >= @price order by UnitPrice desc, ProductName
 go
@@ -16,7 +17,9 @@ go
 exec pr_products_price 
 
 --Zadanie 1.2
---Proszê napisaæ procedurê sk³adowan¹, która wypisze wszystkie produkty z kategorii, której nazwa podana jest jako parametr, przy czym chodzi tylko o produkty o najwy¿szej cenie w tej kategorii. Procedura powinna mieæ równie¿ parametr wyjœciowy (OUTPUT), którego wartoœæ ma byæ ustawiona w procedurze na liczbê produktów w podanej kategorii.
+--Proszê napisaæ procedurê sk³adowan¹, która wypisze wszystkie produkty z kategorii, której nazwa podana jest jako parametr, 
+--przy czym chodzi tylko o produkty o najwy¿szej cenie w tej kategorii. 
+--Procedura powinna mieæ równie¿ parametr wyjœciowy (OUTPUT), którego wartoœæ ma byæ ustawiona w procedurze na liczbê produktów w podanej kategorii.
 alter proc pr_products_by_category(@category varchar(20), @howMatchShow int, @quantityProdInCat int output)
 as
 set nocount on
@@ -89,7 +92,8 @@ go
 exec pr_incrase_price 1
 
 --Zadanie 1.5
---Napisz procedurê sk³adowan¹, która wypisze nazwy tych produktów z tabeli Products w bazie danych Northwind, które maj¹ najwy¿sz¹ cenê (cena przechowywana jest w polu UnitPrice).
+--Napisz procedurê sk³adowan¹, która wypisze nazwy tych produktów z tabeli Products w bazie danych Northwind, 
+--które maj¹ najwy¿sz¹ cenê (cena przechowywana jest w polu UnitPrice).
 use Northwind
 create proc pr_products_highest_price(@quantity int)
 AS
@@ -100,7 +104,10 @@ go
 exec pr_products_highest_price 5
 go
 --Zadanie 1.6
---Napisz procedurê sk³adowan¹, która do tabeli BestCustomer (nale¿y j¹ wczeœniej utworzyæ) wpisze dane klienta lub klientów (z tabeli Customers), który (którzy) z³o¿y³ (z³o¿yli) zamówienia na najwiêksz¹ kwotê, przy czym chodzi tu o sumê kwot na wszystkich zamówieniach odbiorców. Informacja o zamówieniach znajduje siê w tabelach Orders i [Order Details]. Procedura wpisze do tabeli dane jednego klienta lub kilku, gdyby zdarzy³o siê, ¿e kilku z³o¿y³o zamówienia na identyczn¹ najwiêksz¹ kwotê.
+--Napisz procedurê sk³adowan¹, która do tabeli BestCustomer (nale¿y j¹ wczeœniej utworzyæ) wpisze dane klienta lub klientów (z tabeli Customers), 
+--który (którzy) z³o¿y³ (z³o¿yli) zamówienia na najwiêksz¹ kwotê, przy czym chodzi tu o sumê kwot na wszystkich zamówieniach odbiorców. 
+--Informacja o zamówieniach znajduje siê w tabelach Orders i [Order Details]. Procedura wpisze do tabeli dane jednego klienta lub kilku, 
+--gdyby zdarzy³o siê, ¿e kilku z³o¿y³o zamówienia na identyczn¹ najwiêksz¹ kwotê.
 alter proc pr_best_customers
 AS
 declare @custTable table (id int, custId varchar(5), quality float)
@@ -144,7 +151,8 @@ exec pr_InsertBestCustomer
 select * from BestCustomer3
 
 --Zadanie 1.7
---Zmodyfikuj procedurê z zadania 2 tak, by do tabeli BestCustomers wpisane by³y dane nie tylko klientów, którzy zamówili na najwiêksz¹ kwotê, ale równie¿ tych, którzy z³o¿yli zamówienia na kwotê drug¹ i trzeci¹ od góry.
+--Zmodyfikuj procedurê z zadania 2 tak, by do tabeli BestCustomers wpisane by³y dane nie tylko klientów, którzy zamówili na najwiêksz¹ kwotê, 
+--ale równie¿ tych, którzy z³o¿yli zamówienia na kwotê drug¹ i trzeci¹ od góry.
 alter proc pr_best_customers2(@customers int)
 AS
 declare @custTable table (id int, custId varchar(5), quality float)
@@ -245,7 +253,7 @@ select * from [Order Details] where ProductID = 41
 select ProductID, UnitPrice, ROW_NUMBER() OVER (order by ProductID) from [Order Details] where ProductID = 1
 --Zadanie 2.1
 --Napisz funkcjê obliczaj¹c¹ œredni¹ cenê produktu z tabeli Order Details
-alter function fn_average_price(@idProduct int)
+create function fn_average_price(@idProduct int)
 returns float
 as
 begin
@@ -262,6 +270,8 @@ return (@sumPrice / @records)
 end
 go
 select dbo.fn_average_price(15)
+select * from [Order Details] where ProductID = 15
+select avg(UnitPrice) from [Order Details] where ProductID = 15
 
 --Zadanie 2.2
 --Napisz funkcjê znajduj¹c¹ zamówienia o najwy¿szej wartoœci
@@ -671,7 +681,7 @@ enable trigger [tr_changePriceRollback] on Products
 --tabeli SF (Szczegó³y faktur) tylko 
 --poprawnych numerów towaru lub us³ugi.
 --Numery towarów s¹ w tabeli Towary, numery
---us³ug s¹ w tabeli Us³ugi, wiiêc nie da siê
+--us³ug s¹ w tabeli Us³ugi, wiêc nie da siê
 --utworzyæ wiêzów klucza obcego w tabeli SF
 --(bo klucz obcy mo¿e siê odwo³ywaæ tylko do 
 --jednej tabeli.
@@ -834,10 +844,10 @@ begin try
 	and exists (select * from konta where nrKonta = @to)
 		commit
 	else
-		raiserror('Brak wystarczaj¹cych œrodków lub nr konta jest niew³aœciwy', 17,2)
+		raiserror('Brak wystarczaj¹cych œrodków lub nr konta jest niew³aœciwy', 16,1)
 end try
 begin catch
-	raiserror('Brak wystarczaj¹cych œrodków lub nr konta jest niew³aœciwy', 16,1)
+	select ERROR_MESSAGE()
 	rollback
 end catch 
 go
